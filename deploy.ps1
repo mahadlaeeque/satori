@@ -54,6 +54,7 @@ function Invoke-Run {
         -p 8080:8080 `
         -e SATORI_STATE_BACKEND=firestore `
         -e SATORI_GCP_PROJECT=$ProjectId `
+        -e PORT=8080 `
         -e GOOGLE_APPLICATION_CREDENTIALS=/home/satori/.config/gcloud/application_default_credentials.json `
         -v "${GcloudConfig}:/home/satori/.config/gcloud:ro" `
         $LocalTag

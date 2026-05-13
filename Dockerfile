@@ -76,15 +76,14 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # tini = small init, reaps zombies and forwards SIGTERM cleanly to gunicorn.
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# 4 workers × 2 threads = 8 concurrent requests, matches Cloud Run concurrency=80
+# 4 gunicorn workers × UvicornWorker = async I/O via Starlette/Uvicorn.
 # at min-instances=0 fairly well. Tune in the cloudbuild deploy step if needed.
 CMD ["gunicorn", \
      "--bind", "0.0.0.0:8080", \
      "--workers", "4", \
-     "--threads", "2", \
-     "--worker-class", "gthread", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
      "--timeout", "60", \
      "--graceful-timeout", "30", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
-     "app:app"]
+     "main:app"]
