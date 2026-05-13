@@ -1,0 +1,99 @@
+# ============================================================================
+# Satori — Cloud Build pipeline
+# ============================================================================
+# Triggered on every push to main. Steps:
+#   1. Build the Docker image
+#   2. Push to Artifact Registry tagged with the short commit SHA AND :latest
+#   3. (Optional) Deploy to Cloud Run — left commented out until Hosting lands
+#
+# Manual run:
+#   gcloud builds submit --config=cloudbuild.yaml --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
+#
+# Required substitution variables (set on the trigger or via --substitutions):
+#   _REGION         — Artifact Registry region (e.g. us-central1)
+#   _AR_REPO        — Artifact Registry repository name (e.g. satori)
+#   _SERVICE_NAME   — Cloud Run service name (e.g. satori-web) — only needed when deploy step is enabled
+# ============================================================================
+
+substitutions:
+  _REGION:       'us-central1'
+  _AR_REPO:      'satori'
+  _SERVICE_NAME: 'satori-web'
+  # Override with --substitutions=_TAG=<sha> for manual builds.
+  # For Git-triggered builds, set _TAG=$SHORT_SHA in the trigger's Variables section.
+  _TAG:          'manual-build'
+
+# Reference the image once, reuse everywhere.
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+  dynamic_substitutions: true
+
+# Built image will be pushed at:
+#   us-central1-docker.pkg.dev/$PROJECT_ID/satori/satori-web:<sha>
+#   us-central1-docker.pkg.dev/$PROJECT_ID/satori/satori-web:latest
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${_TAG}'
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:latest'
+
+steps:
+  # ── 1. Quick Python syntax check before paying for a full image build ──
+  - id: 'syntax-check'
+    name: 'python:3.12-slim'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        python -m compileall -q app.py firestore_client.py secret_manager.py voice_agent.py scripts/
+        echo "Syntax check passed."
+
+  # ── 2. Build the container image ──
+  - id: 'docker-build'
+    name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${_TAG}'
+      - '--tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:latest'
+      - '--cache-from=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:latest'
+      - '.'
+    waitFor: ['syntax-check']
+
+  # ── 3. Push both tags to Artifact Registry ──
+  - id: 'docker-push-sha'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${_TAG}']
+    waitFor: ['docker-build']
+
+  - id: 'docker-push-latest'
+    name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:latest']
+    waitFor: ['docker-build']
+
+  # ── 4. Deploy to Cloud Run ──
+  # Uncomment this step once the Cloud Run service exists (Phase P1 — Hosting).
+  # Cloud Build's service account needs roles/run.admin + roles/iam.serviceAccountUser.
+  #
+  # - id: 'cloud-run-deploy'
+  #   name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  #   entrypoint: 'gcloud'
+  #   args:
+  #     - 'run'
+  #     - 'deploy'
+  #     - '${_SERVICE_NAME}'
+  #     - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE_NAME}:${_TAG}'
+  #     - '--region=${_REGION}'
+  #     - '--platform=managed'
+  #     - '--service-account=satori-runtime@${PROJECT_ID}.iam.gserviceaccount.com'
+  #     - '--set-env-vars=SATORI_STATE_BACKEND=firestore,SATORI_GCP_PROJECT=${PROJECT_ID}'
+  #     - '--min-instances=0'
+  #     - '--max-instances=10'
+  #     - '--concurrency=80'
+  #     - '--cpu=1'
+  #     - '--memory=1Gi'
+  #     - '--timeout=60s'
+  #     - '--no-allow-unauthenticated'
+  #     - '--quiet'
+  #   waitFor: ['docker-push-sha']
+
+timeout: '1200s'  # 20 minutes — generous; typical run is 3–5 min after first cached build

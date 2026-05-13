@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMC ESS – Attendance Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <style>
+        /* ============================================================
+           THEME VARIABLES
+        ============================================================ */
+        :root {
+            --green:        #7dc243;
+            --green-dark:   #4a8520;
+            --green-hover:  #6ab832;
+            --green-10:     rgba(125,194,67,0.1);
+            --green-20:     rgba(125,194,67,0.2);
+            --green-30:     rgba(125,194,67,0.3);
+            --sidebar-bg:          #1a1e2d;
+            --sidebar-border:      rgba(255,255,255,0.07);
+            --sidebar-item-text:   #8899a6;
+            --sidebar-item-hover:  rgba(255,255,255,0.05);
+        }
+        [data-theme="dark"] {
+            --app-bg:        #141820;
+            --card-bg:       #111827;
+            --card-border:   rgba(255,255,255,0.06);
+            --header-bg:     #1a1e2d;
+            --header-border: rgba(125,194,67,0.25);
+            --text-primary:  #ffffff;
+            --text-secondary:#8899a6;
+            --text-muted:    #4a5578;
+            --text-body:     #e0e0e0;
+            --input-bg:      #1a2235;
+            --input-border:  rgba(255,255,255,0.1);
+            --input-text:    #e0e0e0;
+            --scrollbar:     #2a3352;
+            --divider:       rgba(255,255,255,0.06);
+            --theme-btn-bg:  rgba(255,255,255,0.06);
+            --theme-btn-border: rgba(255,255,255,0.1);
+            --theme-btn-text:#8899a6;
+            --chart-grid:    rgba(255,255,255,0.05);
+            --chart-tick:    #4a5578;
+        }
+        [data-theme="light"] {
+            --app-bg:        #f5f6fa;
+            --card-bg:       #ffffff;
+            --card-border:   #e4e8ef;
+            --header-bg:     #ffffff;
+            --header-border: #e4e8ef;
+            --text-primary:  #1a202c;
+            --text-secondary:#64748b;
+            --text-muted:    #94a3b8;
+            --text-body:     #374151;
+            --input-bg:      #f8fafc;
+            --input-border:  #d1d5db;
+            --input-text:    #1a202c;
+            --scrollbar:     #cbd5e1;
+            --divider:       #e4e8ef;
+            --theme-btn-bg:  #f1f5f9;
+            --theme-btn-border: #e2e8f0;
+            --theme-btn-text:#64748b;
+            --chart-grid:    rgba(0,0,0,0.05);
+            --chart-tick:    #94a3b8;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            height: 100vh; overflow: hidden;
+            display: flex;
+            background: var(--app-bg);
+            color: var(--text-body);
+            transition: background 0.25s, color 0.25s;
+        }
+
+        /* ============================================================
+           SIDEBAR
+        ============================================================ */
+        .tmc-sidebar {
+            width: 240px; flex-shrink: 0;
+            background: var(--sidebar-bg);
+            display: flex; flex-direction: column;
+            height: 100vh;
+            border-right: 1px solid rgba(255,255,255,0.05);
+            transition: width 0.3s ease;
+            overflow: hidden;
+        }
+        .tmc-sidebar.collapsed { width: 64px; }
+
+        .tmc-logo-bar {
+            display: flex; align-items: center; gap: 10px;
+            padding: 18px 16px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0; min-height: 64px;
+        }
+        .tmc-menu-btn {
+            background: none; border: none; cursor: pointer;
+            color: #8899a6; font-size: 18px; padding: 4px;
+            border-radius: 6px; flex-shrink: 0; line-height: 1;
+            transition: color 0.2s;
+        }
+        .tmc-menu-btn:hover { color: #fff; }
+        .tmc-logo-text {
+            display: flex; align-items: center; gap: 6px;
+            white-space: nowrap; overflow: hidden;
+        }
+        .tmc-logo-icon { flex-shrink: 0; }
+        .logo-tmc { font-size: 17px; font-weight: 700; color: #7dc243; }
+        .logo-sep { color: #3a4255; font-size: 17px; font-weight: 300; }
+        .logo-ess { font-size: 17px; font-weight: 500; color: #c0cad8; }
+
+        .tmc-nav {
+            flex: 1; overflow-y: auto; padding: 12px 10px;
+        }
+        .tmc-nav::-webkit-scrollbar { width: 3px; }
+        .tmc-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+        .tmc-nav-item {
+            display: flex; align-items: center; gap: 13px;
+            padding: 11px 12px; border-radius: 8px;
+            cursor: pointer; color: var(--text-secondary);
+            font-size: 13.5px; font-weight: 500;
+            text-decoration: none;
+            transition: all 0.18s;
+            border-left: 3px solid transparent;
+            margin-bottom: 2px;
+            white-space: nowrap; overflow: hidden;
+            user-select: none;
+        }
+        .tmc-nav-item:hover {
+            background: rgba(255,255,255,0.05);
+            color: #c8d0dc;
+            border-left-color: rgba(125,194,67,0.3);
+        }
+        .tmc-nav-item.active {
+            background: rgba(125,194,67,0.1);
+            color: #ffffff;
+            border-left-color: #7dc243;
+        }
+        .tmc-nav-item svg {
+            width: 19px; height: 19px;
+            fill: currentColor; flex-shrink: 0;
+        }
+        .tmc-nav-label { overflow: hidden; text-overflow: ellipsis; }
+        .tmc-nav-divider {
+            height: 1px; background: rgba(255,255,255,0.05);
+            margin: 8px 4px;
+        }
+        .tmc-sidebar-footer {
+            padding: 14px 12px 16px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
+        .tmc-getting-started {
+            width: 100%; padding: 11px 14px;
+            background: #7dc243; border: none;
+            border-radius: 8px; color: #fff;
+            font-size: 13px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+            font-family: inherit;
+            white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tmc-getting-started:hover { background: #6ab832; }
+
+        /* ============================================================
+           DASHBOARD SHELL
+        ============================================================ */
+        .dashboard-shell {
+            flex: 1; display: flex; flex-direction: column;
+            overflow: hidden; min-width: 0;
+            background: var(--app-bg); color: var(--text-body);
+        }
+
+        /* HEADER */
+        .dash-header {
+            background: var(--header-bg);
+            border-bottom: 1px solid var(--header-border);
+            padding: 0 24px; display: flex; align-items: center;
+            height: 56px; flex-shrink: 0; gap: 16px;
+        }
+        .dash-header-title { display: flex; align-items: center; gap: 10px; }
+        .dash-header-title h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+        .dash-header-title p { font-size: 11px; color: var(--text-secondary); }
+        .dash-header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+        .chat-link {
+            padding: 6px 14px; border-radius: 8px; text-decoration: none;
+            color: var(--text-secondary); font-size: 12px; font-weight: 500;
+            display: flex; align-items: center; gap: 5px;
+            background: var(--theme-btn-bg); border: 1px solid var(--theme-btn-border);
+            transition: all 0.2s;
+        }
+        .chat-link:hover { background: rgba(125,194,67,0.15); color: #7dc243; border-color: rgba(125,194,67,0.3); }
+        .chat-link svg { width: 14px; height: 14px; fill: currentColor; }
+        .dash-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #4ade80; }
+        .dash-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* THEME TOGGLE */
+        .theme-toggle {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 8px; cursor: pointer;
+            background: var(--theme-btn-bg); border: 1px solid var(--theme-btn-border);
+            color: var(--theme-btn-text); font-size: 12px; font-weight: 500;
+            font-family: inherit; transition: all 0.2s; white-space: nowrap;
+        }
+        .theme-toggle:hover { border-color: var(--green); color: var(--green); }
+        .theme-toggle svg { width: 14px; height: 14px; fill: currentColor; flex-shrink: 0; }
+
+        /* MAIN */
+        .dashboard-main {
+            flex: 1; padding: 20px 24px; display: flex; flex-direction: column;
+            overflow-y: auto; gap: 20px;
+        }
+        .dashboard-main::-webkit-scrollbar { width: 6px; }
+        .dashboard-main::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+
+        /* ============================================================
+           FILTERS BAR
+        ============================================================ */
+        .filters-bar {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 12px; padding: 14px 20px;
+            display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;
+        }
+        .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-group label { font-size: 11px; color: #8899a6; text-transform: uppercase; letter-spacing: 0.5px; }
+        .filter-group input, .filter-group select {
+            background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 8px; padding: 7px 12px; color: var(--input-text);
+            font-size: 13px; font-family: inherit; outline: none;
+            transition: border-color 0.2s;
+        }
+        .filter-group input:focus, .filter-group select:focus { border-color: var(--green); }
+        .filter-group input[type="date"] { width: 150px; }
+        .filter-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
+        .btn-filter {
+            padding: 7px 18px; border: none; border-radius: 8px; font-size: 13px;
+            font-weight: 500; cursor: pointer; transition: all 0.2s; font-family: inherit;
+        }
+        .btn-apply { background: linear-gradient(135deg, #7dc243, #4a8520); color: #fff; }
+        .btn-apply:hover { opacity: 0.9; }
+        .btn-clear { background: var(--theme-btn-bg); color: var(--text-secondary); border: 1px solid var(--theme-btn-border); }
+        .btn-clear:hover { background: var(--input-bg); }
+        .date-range-hint { font-size: 11px; color: var(--text-muted); margin-left: 4px; align-self: center; }
+
+        /* ============================================================
+           KPI CARDS
+        ============================================================ */
+        .kpi-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 14px;
+        }
+        .kpi-card {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 12px; padding: 16px 18px;
+            position: relative; overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,0,0,0.15); }
+        .kpi-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: var(--kpi-color, #7dc243);
+        }
+        .kpi-label { font-size: 11px; color: #8899a6; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .kpi-value { font-size: 28px; font-weight: 700; color: var(--kpi-color, var(--text-primary)); line-height: 1; }
+        .kpi-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+        .kpi-card.green  { --kpi-color: #4ade80; }
+        .kpi-card.red    { --kpi-color: #ef4444; }
+        .kpi-card.yellow { --kpi-color: #fbbf24; }
+        .kpi-card.blue   { --kpi-color: #60a5fa; }
+        .kpi-card.purple { --kpi-color: #818cf8; }
+        .kpi-card.teal   { --kpi-color: #2dd4bf; }
+        .kpi-card.lime   { --kpi-color: #7dc243; }
+
+        /* ============================================================
+           CHART GRID
+        ============================================================ */
+        .charts-row {
+            display: grid; gap: 16px;
+        }
+        .charts-row-2 { grid-template-columns: 1fr 1fr; }
+        .charts-row-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+        .chart-card {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 12px; padding: 20px; display: flex; flex-direction: column;
+            min-height: 280px;
+        }
+        .chart-card.wide { grid-column: span 2; }
+        .chart-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .chart-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+        .chart-subtitle { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        .chart-badge {
+            padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+            background: var(--green-10); color: var(--green);
+        }
+        .chart-body { flex: 1; position: relative; min-height: 200px; }
+        .chart-loading {
+            position: absolute; inset: 0; display: flex; align-items: center;
+            justify-content: center; flex-direction: column; gap: 8px;
+        }
+        .chart-loading .spinner {
+            width: 28px; height: 28px; border: 3px solid rgba(125,194,67,0.2);
+            border-top-color: #7dc243; border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .chart-loading p { font-size: 12px; color: #6b7280; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ============================================================
+           INSIGHT STRIP
+        ============================================================ */
+        .insight-strip {
+            display: flex; gap: 12px; flex-wrap: wrap;
+        }
+        .insight-chip {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 24px; padding: 8px 16px;
+            font-size: 12px; color: var(--text-secondary);
+            display: flex; align-items: center; gap: 6px;
+            transition: all 0.2s;
+        }
+        .insight-chip .dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .insight-chip strong { color: var(--text-primary); }
+
+        /* ============================================================
+           CHAT WIDGET
+        ============================================================ */
+        .chat-widget-btn {
+            position: fixed; bottom: 24px; right: 24px; z-index: 100;
+            width: 52px; height: 52px; border-radius: 50%;
+            background: linear-gradient(135deg, #7dc243, #5a9e2e);
+            border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 20px rgba(125,194,67,0.4);
+            transition: all 0.3s; color: #fff;
+        }
+        .chat-widget-btn:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(125,194,67,0.5); }
+        .chat-widget-btn svg { width: 22px; height: 22px; fill: #fff; }
+        .chat-widget-btn .close-icon { display: none; }
+        .chat-widget-btn.open .chat-icon { display: none; }
+        .chat-widget-btn.open .close-icon { display: block; }
+
+        .chat-widget {
+            position: fixed; bottom: 88px; right: 24px; z-index: 99;
+            width: 380px; height: 520px;
+            background: #111827; border: 1px solid var(--input-border);
+            border-radius: 16px; display: none; flex-direction: column;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5); overflow: hidden;
+        }
+        .chat-widget.open { display: flex; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .widget-header {
+            padding: 14px 16px; background: linear-gradient(135deg, #7dc243, #5a9e2e);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .widget-header .w-logo {
+            width: 28px; height: 28px; background: rgba(255,255,255,0.2);
+            border-radius: 8px; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 700; color: #fff;
+        }
+        .widget-header h3 { color: #fff; font-size: 14px; font-weight: 600; }
+        .widget-header p { color: rgba(255,255,255,0.75); font-size: 11px; }
+        .widget-messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .widget-messages::-webkit-scrollbar { width: 4px; }
+        .widget-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+        .w-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
+        .w-msg.user { align-self: flex-end; background: #7dc243; color: #fff; border-bottom-right-radius: 4px; }
+        .w-msg.bot { align-self: flex-start; background: #1a2235; color: #e0e0e0; border-bottom-left-radius: 4px; }
+        .w-msg.bot.welcome { color: #8899a6; font-style: italic; }
+        .w-thinking { align-self: flex-start; padding: 8px 16px; display: flex; gap: 4px; }
+        .w-thinking span { width: 6px; height: 6px; background: #8899a6; border-radius: 50%; animation: wBounce 1.2s ease-in-out infinite; }
+        .w-thinking span:nth-child(2) { animation-delay: 0.2s; }
+        .w-thinking span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes wBounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+        .widget-input-area { padding: 10px 12px; border-top: 1px solid var(--divider); display: flex; gap: 8px; }
+        .widget-input-area input {
+            flex: 1; background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 8px; padding: 8px 12px; color: var(--input-text);
+            font-size: 13px; font-family: inherit; outline: none;
+        }
+        .widget-input-area input:focus { border-color: var(--green); }
+        .widget-send-btn { background: #7dc243; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; display: flex; align-items: center; }
+        .widget-send-btn svg { width: 16px; height: 16px; fill: #fff; }
+        .widget-send-btn:hover { background: #6ab832; }
+
+        /* ============================================================
+           GEMINI HELP BUTTON — stacked above chat btn, same green
+        ============================================================ */
+        .help-btn {
+            position: fixed; bottom: 88px; right: 24px; z-index: 100;
+            width: 46px; height: 46px; border-radius: 50%;
+            background: linear-gradient(135deg, #7dc243, #5a9e2e);
+            border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 16px rgba(125,194,67,0.35);
+            transition: all 0.3s; color: #fff;
+        }
+        .help-btn:hover { transform: scale(1.1); box-shadow: 0 6px 24px rgba(125,194,67,0.5); }
+        .help-btn svg { width: 22px; height: 22px; fill: #fff; }
+
+        .help-panel {
+            position: fixed; bottom: 148px; right: 24px; z-index: 99;
+            width: 360px; max-height: 520px;
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 16px; display: none; flex-direction: column;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5); overflow: hidden;
+        }
+        .help-panel.open { display: flex; animation: slideUp 0.3s ease; }
+        .help-panel-header {
+            padding: 14px 16px;
+            background: linear-gradient(135deg, #7dc243, #5a9e2e);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .help-panel-header .h-logo {
+            width: 28px; height: 28px;
+            background: rgba(255,255,255,0.2); border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .help-panel-header .h-logo svg { width: 16px; height: 16px; fill: #fff; }
+        .help-panel-header h3 { color: #fff; font-size: 14px; font-weight: 600; }
+        .help-panel-header p { color: rgba(255,255,255,0.8); font-size: 11px; }
+        .help-panel-header .gemini-tag {
+            margin-left: auto; font-size: 10px; font-weight: 600;
+            background: rgba(255,255,255,0.2); color: #fff;
+            padding: 2px 8px; border-radius: 10px; letter-spacing: 0.5px;
+        }
+
+        .help-quick-links {
+            padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 6px;
+            border-bottom: 1px solid var(--divider);
+        }
+        .help-chip {
+            padding: 4px 10px; border-radius: 20px; font-size: 11px;
+            background: var(--green-10); color: var(--green);
+            border: 1px solid var(--green-20); cursor: pointer;
+            transition: all 0.2s; font-family: inherit;
+        }
+        .help-chip:hover { background: var(--green-20); }
+
+        .help-messages {
+            flex: 1; overflow-y: auto; padding: 12px;
+            display: flex; flex-direction: column; gap: 8px;
+            min-height: 140px; max-height: 260px;
+        }
+        .help-messages::-webkit-scrollbar { width: 4px; }
+        .help-messages::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
+        .h-msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; font-size: 12.5px; line-height: 1.5; }
+        .h-msg.user { align-self: flex-end; background: #7dc243; color: #fff; border-bottom-right-radius: 4px; }
+        .h-msg.bot {
+            align-self: flex-start; background: var(--input-bg); color: var(--text-body);
+            border-bottom-left-radius: 4px; border: 1px solid var(--card-border);
+        }
+        .h-msg.welcome { font-style: italic; color: var(--text-secondary); background: transparent; border: none; }
+        .h-thinking { align-self: flex-start; padding: 8px 16px; display: flex; gap: 4px; }
+        .h-thinking span { width: 6px; height: 6px; background: #7dc243; border-radius: 50%; animation: wBounce 1.2s ease-in-out infinite; }
+        .h-thinking span:nth-child(2) { animation-delay: 0.2s; }
+        .h-thinking span:nth-child(3) { animation-delay: 0.4s; }
+
+        .help-input-area {
+            padding: 10px 12px; border-top: 1px solid var(--divider);
+            display: flex; gap: 8px;
+        }
+        .help-input-area input {
+            flex: 1; background: var(--input-bg); border: 1px solid var(--input-border);
+            border-radius: 8px; padding: 8px 12px; color: var(--input-text);
+            font-size: 12.5px; font-family: inherit; outline: none;
+        }
+        .help-input-area input:focus { border-color: var(--green); }
+        .help-send-btn {
+            background: #7dc243; border: none; border-radius: 8px;
+            padding: 8px 12px; cursor: pointer; display: flex; align-items: center;
+            transition: opacity 0.2s;
+        }
+        .help-send-btn:hover { opacity: 0.85; }
+        .help-send-btn svg { width: 15px; height: 15px; fill: #fff; }
+
+        /* ============================================================
+           RESPONSIVE
+        ============================================================ */
+        @media (max-width: 1100px) {
+            .charts-row-3 { grid-template-columns: 1fr 1fr; }
+            .chart-card.wide { grid-column: span 2; }
+        }
+        @media (max-width: 800px) {
+            .tmc-sidebar { position: fixed; z-index: 100; height: 100vh; }
+            .dashboard-main { padding: 12px; }
+            .charts-row-2, .charts-row-3 { grid-template-columns: 1fr; }
+            .chart-card.wide { grid-column: span 1; }
+            .kpi-row { grid-template-columns: repeat(3, 1fr); }
+            .help-panel, .chat-widget { width: calc(100% - 48px); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="tmc-sidebar" id="tmcSidebar">
+        <div class="tmc-logo-bar">
+            <button class="tmc-menu-btn" onclick="toggleTmcSidebar()">&#9776;</button>
+            <div class="tmc-logo-text" id="tmcLogoText">
+                <div class="tmc-logo-icon">
+                    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13 2C13 2 8 7 8 13C8 16.3 10.7 19 14 19L14 23" stroke="#7dc243" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M13 2C13 2 18 7 18 13C18 16.3 15.3 19 12 19L12 23" stroke="#7dc243" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
+                        <path d="M7 11C7 11 4 13 4 16C4 18.2 5.8 20 8 20L8 23" stroke="#7dc243" stroke-width="1.5" stroke-linecap="round" opacity="0.45"/>
+                    </svg>
+                </div>
+                <span class="logo-tmc">TMC</span>
+                <span class="logo-sep"> | </span>
+                <span class="logo-ess">ESS</span>
+            </div>
+        </div>
+        <nav class="tmc-nav">
+            <a class="tmc-nav-item" href="/">
+                <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                <span class="tmc-nav-label">Home</span>
+            </a>
+            <a class="tmc-nav-item" href="/">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                <span class="tmc-nav-label">My Profile</span>
+            </a>
+            <a class="tmc-nav-item" href="/">
+                <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+                <span class="tmc-nav-label">My Request</span>
+            </a>
+            <a class="tmc-nav-item" href="/">
+                <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
+                <span class="tmc-nav-label">Timesheet</span>
+            </a>
+            <a class="tmc-nav-item" href="/">
+                <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+                <span class="tmc-nav-label">Compensation</span>
+            </a>
+            <a class="tmc-nav-item" href="/">
+                <svg viewBox="0 0 24 24"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+                <span class="tmc-nav-label">Previous Attendance</span>
+            </a>
+            <a class="tmc-nav-item" href="/">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                <span class="tmc-nav-label">Document Center</span>
+            </a>
+            <div class="tmc-nav-divider"></div>
+            <a class="tmc-nav-item active" href="/dashboard">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                <span class="tmc-nav-label">Satori</span>
+            </a>
+        </nav>
+        <div class="tmc-sidebar-footer">
+            <button class="tmc-getting-started">Getting Started</button>
+        </div>
+    </aside>
+
+    <!-- DASHBOARD SHELL -->
+    <div class="dashboard-shell">
+
+        <!-- Header -->
+        <div class="dash-header">
+            <div class="dash-header-title">
+                <div>
+                    <h1>Attendance Dashboard</h1>
+                    <p>{{ agent_name }} — Live BigQuery Analytics</p>
+                </div>
+            </div>
+            <div class="dash-header-right">
+                <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()">
+                    <svg id="themeIcon" viewBox="0 0 24 24">
+                        <path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91l-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91l1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z"/>
+                    </svg>
+                    <span id="themeLabel">Light</span>
+                </button>
+                <a class="chat-link" href="/">
+                    <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+                    Back to Satori
+                </a>
+                <div class="dash-status"><div class="dash-status-dot"></div> Live</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="dashboard-main" id="dashboardMain">
+
+            <!-- Filters -->
+            <div class="filters-bar">
+                <div class="filter-group">
+                    <label>Date From</label>
+                    <input type="date" id="filterDateFrom">
+                </div>
+                <div class="filter-group">
+                    <label>Date To</label>
+                    <input type="date" id="filterDateTo">
+                </div>
+                <span class="date-range-hint" id="rangeHint">Showing last 30 days</span>
+                <div class="filter-actions">
+                    <button class="btn-filter btn-clear" onclick="clearFilters()">Clear</button>
+                    <button class="btn-filter btn-apply" onclick="applyFilters()">
+                        <span id="applyBtnText">Refresh Charts</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPI Row -->
+            <div class="kpi-row" id="kpiRow">
+                <div class="kpi-card lime">
+                    <div class="kpi-label">Total Records</div>
+                    <div class="kpi-value" id="kpiTotal">--</div>
+                    <div class="kpi-sub" id="kpiTotalSub">Loading…</div>
+                </div>
+                <div class="kpi-card green">
+                    <div class="kpi-label">Present</div>
+                    <div class="kpi-value" id="kpiPresent">--</div>
+                    <div class="kpi-sub" id="kpiPresentSub">days</div>
+                </div>
+                <div class="kpi-card red">
+                    <div class="kpi-label">Absent</div>
+                    <div class="kpi-value" id="kpiAbsent">--</div>
+                    <div class="kpi-sub" id="kpiAbsentSub">days</div>
+                </div>
+                <div class="kpi-card yellow">
+                    <div class="kpi-label">On Leave</div>
+                    <div class="kpi-value" id="kpiLeave">--</div>
+                    <div class="kpi-sub">days</div>
+                </div>
+                <div class="kpi-card teal">
+                    <div class="kpi-label">Attendance Rate</div>
+                    <div class="kpi-value" id="kpiRate">--%</div>
+                    <div class="kpi-sub">of working days</div>
+                </div>
+                <div class="kpi-card blue">
+                    <div class="kpi-label">Employees</div>
+                    <div class="kpi-value" id="kpiEmp">--</div>
+                    <div class="kpi-sub">unique tracked</div>
+                </div>
+                <div class="kpi-card purple">
+                    <div class="kpi-label">Remote</div>
+                    <div class="kpi-value" id="kpiRemote">--</div>
+                    <div class="kpi-sub">days</div>
+                </div>
+            </div>
+
+            <!-- AI Insights Strip -->
+            <div class="insight-strip" id="insightStrip" style="display:none;">
+                <!-- populated dynamically -->
+            </div>
+
+            <!-- Charts Row 1: Trend (wide) + Donut -->
+            <div class="charts-row charts-row-2">
+                <div class="chart-card wide">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Attendance Rate Over Time</div>
+                            <div class="chart-subtitle">% of employees present each day</div>
+                        </div>
+                        <span class="chart-badge" id="trendBadge">--</span>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-loading" id="trendLoading">
+                            <div class="spinner"></div><p>Loading chart…</p>
+                        </div>
+                        <canvas id="trendChart" style="display:none;"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Status Breakdown</div>
+                            <div class="chart-subtitle">Distribution across all records</div>
+                        </div>
+                        <span class="chart-badge" id="statusBadge">--</span>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-loading" id="statusLoading">
+                            <div class="spinner"></div><p>Loading chart…</p>
+                        </div>
+                        <canvas id="statusChart" style="display:none;"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row 2: Absent employees + Check-in hours -->
+            <div class="charts-row charts-row-2">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Top Absent Employees</div>
+                            <div class="chart-subtitle">Highest absence days in period</div>
+                        </div>
+                        <span class="chart-badge" id="absentBadge">Top 10</span>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-loading" id="absentLoading">
+                            <div class="spinner"></div><p>Loading chart…</p>
+                        </div>
+                        <canvas id="absentChart" style="display:none;"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <div>
+                            <div class="chart-title">Check-in Time Distribution</div>
+                            <div class="chart-subtitle">Hour-of-day frequency (present days)</div>
+                        </div>
+                        <span class="chart-badge" id="hourBadge">--</span>
+                    </div>
+                    <div class="chart-body">
+                        <div class="chart-loading" id="hourLoading">
+                            <div class="spinner"></div><p>Loading chart…</p>
+                        </div>
+                        <canvas id="hourChart" style="display:none;"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- end .dashboard-main -->
+    </div><!-- end .dashboard-shell -->
+
+    <!-- ============================================================
+         SATORI CHAT WIDGET (unchanged)
+    ============================================================ -->
+    <button class="chat-widget-btn" id="chatWidgetBtn" onclick="toggleChatWidget()">
+        <svg class="chat-icon" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+        <svg class="close-icon" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+    </button>
+
+    <div class="chat-widget" id="chatWidget">
+        <div class="widget-header">
+            <div class="w-logo">S</div>
+            <div>
+                <h3>Satori Assistant</h3>
+                <p>Ask about attendance data</p>
+            </div>
+        </div>
+        <div class="widget-messages" id="widgetMessages">
+            <div class="w-msg bot welcome">Hi! I'm Satori. Ask me anything about attendance, timesheets, or allocation data.</div>
+        </div>
+        <div class="widget-input-area">
+            <input type="text" id="widgetInput" placeholder="Ask a question…" onkeydown="if(event.key==='Enter') sendWidgetMessage()">
+            <button class="widget-send-btn" onclick="sendWidgetMessage()">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         GEMINI HELP BUTTON + PANEL
+    ============================================================ -->
+    <button class="help-btn" id="helpBtn" onclick="toggleHelpPanel()" title="Help — How to use Satori">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+    </button>
+
+    <div class="help-panel" id="helpPanel">
+        <div class="help-panel-header">
+            <div class="h-logo">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+            </div>
+            <div>
+                <h3>Satori Help</h3>
+                <p>Powered by Gemini AI</p>
+            </div>
+            <div class="gemini-tag">Gemini</div>
+        </div>
+        <div class="help-quick-links">
+            <button class="help-chip" onclick="askHelp('How do I use the dashboard?')">📊 Dashboard</button>
+            <button class="help-chip" onclick="askHelp('How do I use the chat assistant?')">💬 Chat</button>
+            <button class="help-chip" onclick="askHelp('How do I filter by date range?')">📅 Filters</button>
+            <button class="help-chip" onclick="askHelp('What is the Capability Matrix?')">🎯 Matrix</button>
+            <button class="help-chip" onclick="askHelp('How do I use voice input?')">🎙️ Voice</button>
+            <button class="help-chip" onclick="askHelp('How do I change settings?')">⚙️ Settings</button>
+        </div>
+        <div class="help-messages" id="helpMessages">
+            <div class="h-msg welcome bot">Hi! I'm your Satori guide, powered by Gemini. Tap a topic above or ask me anything about how to use this platform.</div>
+        </div>
+        <div class="help-input-area">
+            <input type="text" id="helpInput" placeholder="Ask how to use Satori…" onkeydown="if(event.key==='Enter') sendHelpMessage()">
+            <button class="help-send-btn" onclick="sendHelpMessage()">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+    // =============================================================
+    // THEME
+    // =============================================================
+    function applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('satori-theme', theme);
+        const icon = document.getElementById('themeIcon');
+        const label = document.getElementById('themeLabel');
+        if (theme === 'dark') {
+            icon.innerHTML = '<path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91l-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91l1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z"/>';
+            label.textContent = 'Light';
+        } else {
+            icon.innerHTML = '<path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 0 1-4.4 2.26 5.403 5.403 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>';
+            label.textContent = 'Dark';
+        }
+        if (window._charts) rebuildCharts();
+    }
+    function toggleTheme() {
+        const c = document.documentElement.getAttribute('data-theme');
+        applyTheme(c === 'dark' ? 'light' : 'dark');
+    }
+    applyTheme(localStorage.getItem('satori-theme') || 'dark');
+
+    // =============================================================
+    // SIDEBAR
+    // =============================================================
+    function toggleTmcSidebar() {
+        document.getElementById('tmcSidebar').classList.toggle('collapsed');
+    }
+
+    // =============================================================
+    // THEME-AWARE CHART DEFAULTS
+    // =============================================================
+    function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark'; }
+    function chartDefaults() {
+        const dark = isDark();
+        return {
+            gridColor: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+            tickColor: dark ? '#4a5578' : '#94a3b8',
+            legendColor: dark ? '#8899a6' : '#64748b',
+            tooltipBg: dark ? '#1a2235' : '#ffffff',
+            tooltipText: dark ? '#e0e0e0' : '#1a202c',
+        };
+    }
+
+    const STATUS_COLORS = {
+        'Present':  '#4ade80',
+        'Absent':   '#ef4444',
+        'On Leave': '#fbbf24',
+        'Holiday':  '#60a5fa',
+        'Weekend':  '#9ca3af',
+        'Remote':   '#818cf8',
+    };
+    function statusColor(s) {
+        if (!s) return '#8899a6';
+        for (const [k, v] of Object.entries(STATUS_COLORS)) {
+            if (s.toLowerCase().includes(k.toLowerCase())) return v;
+        }
+        return '#8899a6';
+    }
+
+    // =============================================================
+    // STATE
+    // =============================================================
+    window._charts = {};
+    let widgetConversationId = 'widget-' + Date.now().toString(36);
+    let widgetProcessing = false;
+    let helpProcessing = false;
+
+    // =============================================================
+    // LOAD CHART DATA
+    // =============================================================
+    async function loadChartData() {
+        const from = document.getElementById('filterDateFrom').value;
+        const to   = document.getElementById('filterDateTo').value;
+        const params = new URLSearchParams();
+        if (from) params.set('date_from', from);
+        if (to)   params.set('date_to', to);
+
+        // Update hint
+        const hint = document.getElementById('rangeHint');
+        hint.textContent = from || to
+            ? `${from || '…'} → ${to || '…'}`
+            : 'Showing last 30 days';
+
+        // Show spinners
+        ['trend','status','absent','hour'].forEach(id => {
+            document.getElementById(id + 'Loading').style.display = 'flex';
+            const c = document.getElementById(id + 'Chart');
+            if (c) c.style.display = 'none';
+        });
+
+        try {
+            const resp = await fetch(`/api/chart-data?${params}`);
+            const data = await resp.json();
+            if (data.error) {
+                showChartError(data.error);
+                return;
+            }
+            renderKPIs(data.kpi);
+            renderInsights(data.kpi, data.top_absent);
+            renderTrendChart(data.attendance_rate);
+            renderStatusChart(data.status_breakdown);
+            renderAbsentChart(data.top_absent);
+            renderHourChart(data.checkin_hours);
+        } catch (e) {
+            showChartError('Failed to connect to server. Is the Flask app running?');
+        }
+    }
+
+    function showChartError(msg) {
+        ['trend','status','absent','hour'].forEach(id => {
+            const el = document.getElementById(id + 'Loading');
+            if (el) el.innerHTML = `<p style="color:#ef4444;font-size:12px;padding:8px;">${msg}</p>`;
+        });
+    }
+
+    // =============================================================
+    // KPIs
+    // =============================================================
+    function fmt(n) { return n !== undefined && n !== null ? n.toLocaleString() : '--'; }
+    function renderKPIs(k) {
+        if (!k) return;
+        document.getElementById('kpiTotal').textContent   = fmt(k.total);
+        document.getElementById('kpiTotalSub').textContent = `${fmt(k.unique_employees)} employees`;
+        document.getElementById('kpiPresent').textContent  = fmt(k.present);
+        document.getElementById('kpiAbsent').textContent   = fmt(k.absent);
+        document.getElementById('kpiLeave').textContent    = fmt(k.on_leave);
+        document.getElementById('kpiRate').textContent     = k.attendance_rate !== undefined ? k.attendance_rate + '%' : '--%';
+        document.getElementById('kpiEmp').textContent      = fmt(k.unique_employees);
+        document.getElementById('kpiRemote').textContent   = fmt(k.remote);
+
+        // Sub-texts
+        if (k.total > 0) {
+            document.getElementById('kpiPresentSub').textContent =
+                `${((k.present / k.total) * 100).toFixed(1)}% of total`;
+            document.getElementById('kpiAbsentSub').textContent =
+                `${((k.absent / k.total) * 100).toFixed(1)}% of total`;
+        }
+    }
+
+    // =============================================================
+    // INSIGHTS STRIP
+    // =============================================================
+    function renderInsights(kpi, topAbsent) {
+        const strip = document.getElementById('insightStrip');
+        if (!kpi) { strip.style.display = 'none'; return; }
+        strip.style.display = 'flex';
+        const chips = [];
+        if (kpi.attendance_rate >= 80) {
+            chips.push({dot:'#4ade80', text:`<strong>${kpi.attendance_rate}%</strong> attendance rate — Good standing`});
+        } else if (kpi.attendance_rate >= 60) {
+            chips.push({dot:'#fbbf24', text:`<strong>${kpi.attendance_rate}%</strong> attendance rate — Needs attention`});
+        } else if (kpi.attendance_rate > 0) {
+            chips.push({dot:'#ef4444', text:`<strong>${kpi.attendance_rate}%</strong> attendance rate — Critical`});
+        }
+        if (kpi.absent > 0 && kpi.total > 0) {
+            chips.push({dot:'#ef4444', text:`<strong>${kpi.absent}</strong> absences recorded`});
+        }
+        if (kpi.remote > 0) {
+            chips.push({dot:'#818cf8', text:`<strong>${kpi.remote}</strong> remote work days`});
+        }
+        if (topAbsent && topAbsent.length > 0) {
+            chips.push({dot:'#fbbf24', text:`Most absent: <strong>${topAbsent[0].name}</strong> (${topAbsent[0].days} days)`});
+        }
+        if (kpi.holiday > 0) {
+            chips.push({dot:'#60a5fa', text:`<strong>${kpi.holiday}</strong> holiday records`});
+        }
+        strip.innerHTML = chips.map(c =>
+            `<div class="insight-chip"><div class="dot" style="background:${c.dot}"></div>${c.text}</div>`
+        ).join('');
+    }
+
+    // =============================================================
+    // CHART: ATTENDANCE RATE TREND
+    // =============================================================
+    function renderTrendChart(rateData) {
+        const loading = document.getElementById('trendLoading');
+        const canvas  = document.getElementById('trendChart');
+        loading.style.display = 'none';
+
+        if (!rateData || rateData.length === 0) {
+            loading.innerHTML = '<p style="color:#6b7280;font-size:12px;">No trend data available</p>';
+            loading.style.display = 'flex';
+            return;
+        }
+
+        canvas.style.display = 'block';
+        const d = chartDefaults();
+        const labels = rateData.map(r => r.date);
+        const values = rateData.map(r => r.rate);
+        const avg = (values.reduce((a,b) => a+b, 0) / values.length).toFixed(1);
+        document.getElementById('trendBadge').textContent = `Avg ${avg}%`;
+
+        if (window._charts.trend) window._charts.trend.destroy();
+        window._charts.trend = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Attendance Rate %',
+                    data: values,
+                    borderColor: '#7dc243',
+                    backgroundColor: 'rgba(125,194,67,0.08)',
+                    borderWidth: 2,
+                    pointRadius: values.length > 30 ? 0 : 3,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: '#7dc243',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: d.tooltipBg,
+                        titleColor: d.tooltipText,
+                        bodyColor: d.tooltipText,
+                        borderColor: 'rgba(125,194,67,0.3)',
+                        borderWidth: 1,
+                        callbacks: { label: ctx => ` ${ctx.parsed.y}%` }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: d.gridColor },
+                        ticks: {
+                            color: d.tickColor, font: { size: 10 },
+                            maxTicksLimit: 10,
+                            maxRotation: 0
+                        }
+                    },
+                    y: {
+                        min: 0, max: 100,
+                        grid: { color: d.gridColor },
+                        ticks: {
+                            color: d.tickColor, font: { size: 10 },
+                            callback: v => v + '%'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // =============================================================
+    // CHART: STATUS DONUT
+    // =============================================================
+    function renderStatusChart(statusData) {
+        const loading = document.getElementById('statusLoading');
+        const canvas  = document.getElementById('statusChart');
+        loading.style.display = 'none';
+
+        if (!statusData || statusData.length === 0) {
+            loading.innerHTML = '<p style="color:#6b7280;font-size:12px;">No status data available</p>';
+            loading.style.display = 'flex'; return;
+        }
+
+        canvas.style.display = 'block';
+        const d = chartDefaults();
+        const labels = statusData.map(r => r.status || 'Unknown');
+        const values = statusData.map(r => r.count);
+        const colors = labels.map(l => statusColor(l));
+        const total  = values.reduce((a,b) => a+b, 0);
+        document.getElementById('statusBadge').textContent = `${total.toLocaleString()} total`;
+
+        if (window._charts.status) window._charts.status.destroy();
+        window._charts.status = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels,
+                datasets: [{ data: values, backgroundColor: colors, borderWidth: 2,
+                    borderColor: isDark() ? '#111827' : '#ffffff',
+                    hoverOffset: 8 }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: d.legendColor, font: { size: 11 },
+                            padding: 12, usePointStyle: true, pointStyleWidth: 8
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: d.tooltipBg,
+                        titleColor: d.tooltipText,
+                        bodyColor: d.tooltipText,
+                        borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+                        callbacks: {
+                            label: ctx => {
+                                const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                                return ` ${ctx.parsed.toLocaleString()} (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // =============================================================
+    // CHART: TOP ABSENT EMPLOYEES
+    // =============================================================
+    function renderAbsentChart(absentData) {
+        const loading = document.getElementById('absentLoading');
+        const canvas  = document.getElementById('absentChart');
+        loading.style.display = 'none';
+
+        if (!absentData || absentData.length === 0) {
+            loading.innerHTML = '<p style="color:#6b7280;font-size:12px;">No absence data available</p>';
+            loading.style.display = 'flex'; return;
+        }
+
+        canvas.style.display = 'block';
+        const d = chartDefaults();
+        const labels = absentData.map(r => r.name || 'Unknown');
+        const values = absentData.map(r => r.days);
+        document.getElementById('absentBadge').textContent = `Top ${absentData.length}`;
+
+        if (window._charts.absent) window._charts.absent.destroy();
+        window._charts.absent = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Absent Days',
+                    data: values,
+                    backgroundColor: values.map((v, i) => {
+                        const alpha = 1 - (i / values.length) * 0.5;
+                        return `rgba(239,68,68,${alpha})`;
+                    }),
+                    borderRadius: 6,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: d.tooltipBg, titleColor: d.tooltipText,
+                        bodyColor: d.tooltipText,
+                        callbacks: { label: ctx => ` ${ctx.parsed.x} days absent` }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: d.gridColor },
+                        ticks: { color: d.tickColor, font: { size: 10 } }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: { color: d.tickColor, font: { size: 11 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // =============================================================
+    // CHART: CHECK-IN HOUR DISTRIBUTION
+    // =============================================================
+    function renderHourChart(hourData) {
+        const loading = document.getElementById('hourLoading');
+        const canvas  = document.getElementById('hourChart');
+        loading.style.display = 'none';
+
+        if (!hourData || hourData.length === 0) {
+            loading.innerHTML = '<p style="color:#6b7280;font-size:12px;">No check-in data available</p>';
+            loading.style.display = 'flex'; return;
+        }
+
+        canvas.style.display = 'block';
+        const d = chartDefaults();
+
+        // Fill all hours 5..22 with zeros
+        const hourMap = {};
+        hourData.forEach(r => { hourMap[r.hour] = r.count; });
+        const allHours = Array.from({length: 18}, (_, i) => i + 5);
+        const labels = allHours.map(h => {
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            return `${h12}${ampm}`;
+        });
+        const values = allHours.map(h => hourMap[h] || 0);
+        const lateIdx = allHours.indexOf(10); // 9:30 approx = hour 10
+
+        const total = values.reduce((a,b)=>a+b,0);
+        document.getElementById('hourBadge').textContent = `${total.toLocaleString()} check-ins`;
+
+        if (window._charts.hour) window._charts.hour.destroy();
+        window._charts.hour = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Check-ins',
+                    data: values,
+                    backgroundColor: allHours.map(h =>
+                        h < 10 ? 'rgba(125,194,67,0.8)' :
+                        h === 10 ? 'rgba(251,191,36,0.8)' :
+                        'rgba(239,68,68,0.65)'
+                    ),
+                    borderRadius: 5,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: d.tooltipBg, titleColor: d.tooltipText,
+                        bodyColor: d.tooltipText,
+                        callbacks: {
+                            label: ctx => ` ${ctx.parsed.y.toLocaleString()} check-ins`,
+                            afterLabel: ctx => {
+                                const h = allHours[ctx.dataIndex];
+                                return h < 10 ? '✓ On time' : h === 10 ? '⚠ Borderline' : '✗ Late';
+                            }
+                        }
+                    },
+                    annotation: {}
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: d.tickColor, font: { size: 10 } }
+                    },
+                    y: {
+                        grid: { color: d.gridColor },
+                        ticks: { color: d.tickColor, font: { size: 10 } }
+                    }
+                }
+            }
+        });
+    }
+
+    function rebuildCharts() {
+        loadChartData();
+    }
+
+    // =============================================================
+    // FILTERS
+    // =============================================================
+    function applyFilters() { loadChartData(); }
+    function clearFilters() {
+        document.getElementById('filterDateFrom').value = '';
+        document.getElementById('filterDateTo').value = '';
+        loadChartData();
+    }
+
+    // =============================================================
+    // SATORI CHAT WIDGET (unchanged)
+    // =============================================================
+    function toggleChatWidget() {
+        const widget = document.getElementById('chatWidget');
+        const btn = document.getElementById('chatWidgetBtn');
+        widget.classList.toggle('open');
+        btn.classList.toggle('open');
+        if (widget.classList.contains('open')) document.getElementById('widgetInput').focus();
+    }
+
+    async function sendWidgetMessage() {
+        const input = document.getElementById('widgetInput');
+        const question = input.value.trim();
+        if (!question || widgetProcessing) return;
+        widgetProcessing = true; input.value = '';
+        addWidgetMsg(question, 'user'); showWidgetThinking();
+        try {
+            const resp = await fetch('/ask', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, conversation_id: widgetConversationId, lang: 'en' })
+            });
+            const data = await resp.json();
+            hideWidgetThinking();
+            addWidgetMsg(data.answer || 'Sorry, I could not process that.', 'bot');
+        } catch {
+            hideWidgetThinking();
+            addWidgetMsg('Connection error. Please try again.', 'bot');
+        }
+        widgetProcessing = false;
+    }
+
+    function addWidgetMsg(text, type) {
+        const container = document.getElementById('widgetMessages');
+        const div = document.createElement('div');
+        div.className = `w-msg ${type}`;
+        div.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.05);padding:1px 4px;border-radius:3px;">$1</code>')
+            .replace(/\n/g, '<br>');
+        container.appendChild(div); container.scrollTop = container.scrollHeight;
+    }
+    function showWidgetThinking() {
+        const c = document.getElementById('widgetMessages');
+        const d = document.createElement('div');
+        d.className = 'w-thinking'; d.id = 'widgetThinking';
+        d.innerHTML = '<span></span><span></span><span></span>';
+        c.appendChild(d); c.scrollTop = c.scrollHeight;
+    }
+    function hideWidgetThinking() { const e = document.getElementById('widgetThinking'); if (e) e.remove(); }
+
+    // =============================================================
+    // GEMINI HELP
+    // =============================================================
+    function toggleHelpPanel() {
+        const panel = document.getElementById('helpPanel');
+        panel.classList.toggle('open');
+        if (panel.classList.contains('open')) document.getElementById('helpInput').focus();
+    }
+
+    async function askHelp(question) {
+        if (helpProcessing) return;
+        document.getElementById('helpInput').value = question;
+        await sendHelpMessage();
+    }
+
+    async function sendHelpMessage() {
+        const input = document.getElementById('helpInput');
+        const question = input.value.trim();
+        if (!question || helpProcessing) return;
+        helpProcessing = true; input.value = '';
+        addHelpMsg(question, 'user'); showHelpThinking();
+        try {
+            const resp = await fetch('/api/help', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const data = await resp.json();
+            hideHelpThinking();
+            addHelpMsg(data.answer || 'I could not find an answer. Please try rephrasing.', 'bot');
+        } catch {
+            hideHelpThinking();
+            addHelpMsg('Help service is unavailable. Make sure the server is running.', 'bot');
+        }
+        helpProcessing = false;
+    }
+
+    function addHelpMsg(text, type) {
+        const c = document.getElementById('helpMessages');
+        const d = document.createElement('div');
+        d.className = `h-msg ${type}`;
+        d.innerHTML = text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.08);padding:1px 4px;border-radius:3px;font-size:11px;">$1</code>')
+            .replace(/\n/g, '<br>');
+        c.appendChild(d); c.scrollTop = c.scrollHeight;
+    }
+    function showHelpThinking() {
+        const c = document.getElementById('helpMessages');
+        const d = document.createElement('div');
+        d.className = 'h-thinking'; d.id = 'helpThinking';
+        d.innerHTML = '<span></span><span></span><span></span>';
+        c.appendChild(d); c.scrollTop = c.scrollHeight;
+    }
+    function hideHelpThinking() { const e = document.getElementById('helpThinking'); if (e) e.remove(); }
+
+    // =============================================================
+    // INIT
+    // =============================================================
+    loadChartData();
+    </script>
+</body>
+</html>

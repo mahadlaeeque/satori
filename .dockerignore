@@ -1,0 +1,72 @@
+# Keep the container image lean and free of secrets.
+# Anything matched here is excluded from the build context.
+
+# Python cruft
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.tox/
+
+# Local virtualenvs (we build a fresh venv inside the image)
+venv/
+.venv/
+env/
+
+# Local state — must NEVER ship in the image
+chat_history.json
+settings.json
+
+# Local raw data (lives in Cloud Storage in production)
+data/
+
+# Local secrets
+service-account/
+*.pem
+*.key
+*.crt
+.env
+.env.*
+
+# Editor / OS / IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Top-level docs and assets that aren't served by the app
+# (note: anything inside templates/ and static/ IS still included)
+/Platform 7 Data Requirements..docx
+/TMC Black Logo.png
+/TMC White Logo.png
+/README.md
+/FIRESTORE_MIGRATION.md
+/BUILD_DELIVERY.md
+*.docx
+*.pdf
+*.pptx
+*.xlsx
+
+# CI / Cloud Build / Docker plumbing
+.gcloudignore
+cloudbuild.yaml
+deploy.ps1
+Dockerfile
+.dockerignore
+
+# Logs
+logs/
+*.log

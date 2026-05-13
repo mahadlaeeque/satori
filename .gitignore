@@ -1,0 +1,11 @@
+﻿__pycache__/
+*.pyc
+.venv/
+venv/
+chat_history.json
+settings.json
+data/
+service-account/
+*.log
+.env
+.env.*

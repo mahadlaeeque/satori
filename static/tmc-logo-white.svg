@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140">
+  <!-- TMC geometric crystal logo - white version (for dark backgrounds) -->
+  <!-- Outer left dark panel -->
+  <polygon points="20,25 40,10 40,130 20,115" fill="#808080"/>
+  <!-- Outer right dark panel -->
+  <polygon points="100,25 80,10 80,130 100,115" fill="#808080"/>
+  <!-- Inner left light panel -->
+  <polygon points="40,10 55,2 55,138 40,130" fill="#b0b0b0"/>
+  <!-- Inner right light panel -->
+  <polygon points="80,10 65,2 65,138 80,130" fill="#b0b0b0"/>
+  <!-- Center green stripe -->
+  <polygon points="55,2 60,0 65,2 65,138 60,140 55,138" fill="#7dc243"/>
+  <!-- Left edge highlight -->
+  <polygon points="15,28 20,25 20,115 15,112" fill="#606060"/>
+  <!-- Right edge highlight -->
+  <polygon points="105,28 100,25 100,115 105,112" fill="#606060"/>
+  <!-- Top cap left -->
+  <polygon points="20,25 40,10 55,2 60,0 35,12 15,28" fill="#909090" opacity="0.5"/>
+  <!-- Top cap right -->
+  <polygon points="100,25 80,10 65,2 60,0 85,12 105,28" fill="#909090" opacity="0.5"/>
+  <!-- Bottom cap left -->
+  <polygon points="20,115 40,130 55,138 60,140 35,128 15,112" fill="#505050" opacity="0.5"/>
+  <!-- Bottom cap right -->
+  <polygon points="100,115 80,130 65,138 60,140 85,128 105,112" fill="#505050" opacity="0.5"/>
+</svg>
