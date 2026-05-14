@@ -1,0 +1,77 @@
+# =============================================================================
+# Satori — Python project metadata
+# =============================================================================
+# This file is the source of truth for Satori's Python dependencies. It's
+# consumed by uv (https://github.com/astral-sh/uv) to produce a reproducible
+# uv.lock that the Dockerfile builder stage installs from.
+#
+# Local dev workflow:
+#   pip install uv                       # one-time
+#   uv sync                              # creates .venv + installs from lock
+#   uv run uvicorn main:app --reload     # run the app
+#
+# Adding / removing a dep:
+#   uv add <package>                     # adds + locks + installs
+#   uv remove <package>                  # opposite
+#
+# Regenerate the lockfile (after editing dependencies below by hand):
+#   uv lock
+#
+# requirements.txt is retained for now as a transitional fallback for tooling
+# that doesn't speak pyproject.toml yet. Once everything (CI, Dockerfile, dev
+# loops) is on uv, requirements.txt can be deleted.
+# =============================================================================
+
+[project]
+name = "satori"
+version = "2.1.0"
+description = "TMC Capability Intelligence platform — BigQuery + Firestore + Gemini, served via FastAPI"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "TMC" },
+]
+
+dependencies = [
+    # Web framework
+    "fastapi==0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "gunicorn>=21.2.0",
+    "python-multipart>=0.0.9",
+    "jinja2>=3.1.4",
+    "pydantic>=2.7.0",
+
+    # Google Cloud — data, secrets, state
+    "google-genai>=1.0.0",
+    "google-cloud-bigquery==3.25.0",
+    "google-cloud-secret-manager>=2.20.0",
+    "google-cloud-firestore>=2.16.0",
+
+    # Data wrangling
+    "pandas==2.2.0",
+    "db-dtypes==1.3.0",
+
+    # HTTP
+    "requests>=2.31.0",
+
+    # Observability — OpenTelemetry + Cloud Trace exporter. Gated at runtime
+    # on the K_SERVICE env var (set automatically on Cloud Run) so local dev
+    # doesn't try to push spans to Cloud Trace.
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-requests>=0.48b0",
+    "opentelemetry-exporter-gcp-trace>=1.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6.0",
+    "pytest>=8.0.0",
+]
+
+[tool.uv]
+# Keep tooling deterministic in CI — uv refuses to mutate the lockfile unless
+# explicitly asked, so `uv sync --frozen` in the Dockerfile fails loudly if
+# pyproject.toml drifts from uv.lock.
+package = false
