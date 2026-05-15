@@ -1,26 +1,37 @@
 # ============================================================================
-# Satori — Production container image
+# Satori — Production container image (distroless)
 # ============================================================================
 # Multi-stage build:
-#   1. builder — uses `uv` to install Python dependencies into a venv
-#   2. runtime — python:3.11-slim, gunicorn as non-root, port 8080
+#   1. builder — uses `uv` to install deps into a flat directory (/pyroot)
+#   2. runtime — Google distroless Python 3 (nonroot), gunicorn on port 8080
 #
 # Why this shape:
-#   * uv installs ~10× faster than pip (Backend baseline check).
-#   * python:3.11-slim is small (~150 MB) and we keep paths consistent between
-#     stages so the venv's python symlinks resolve correctly. Distroless + venv
-#     is a known footgun (symlink to system python breaks across stages); we
-#     accept a slightly larger runtime for stability.
-#   * Non-root UID 1001 satisfies the "container runs as non-root" baseline.
+#   * uv installs ~10× faster than pip (Backend baseline).
+#   * Distroless runtime ships only Python + stdlib + CA certs — no shell,
+#     no apt, no curl. Tiny image (~60 MB), smaller attack surface, faster
+#     Cloud Run cold-starts. (Containers baseline.)
+#   * `pip --target` instead of a venv avoids the classic distroless+venv
+#     footgun (the venv's `python` is a symlink to the builder's interpreter
+#     path, which doesn't exist inside distroless). A flat package dir is
+#     copied over verbatim and picked up via PYTHONPATH — no symlinks to
+#     break across stages.
+#   * Gunicorn is invoked via `python -m gunicorn` instead of the console
+#     script, because the console script's shebang points at the builder's
+#     Python and would fail in distroless.
+#   * The `:nonroot` tag pre-creates UID/GID 65532 and runs as that user.
 #
 # Build locally:    docker build -t satori:dev .
 # Run locally:      docker run --rm -p 8080:8080 -e SATORI_STATE_BACKEND=firestore \
-#                       -v $HOME/.config/gcloud:/home/satori/.config/gcloud:ro \
+#                       -v $HOME/.config/gcloud:/home/nonroot/.config/gcloud:ro \
 #                       satori:dev
 # Health check:     curl http://localhost:8080/api/health
+#                   (HEALTHCHECK directive intentionally absent — distroless
+#                   has no curl, and Cloud Run runs its own liveness probe.)
 # ============================================================================
 
 # ─── Stage 1: builder ────────────────────────────────────────────────────────
+# Pinned to 3.11 to match the distroless runtime — wheel ABI compatibility
+# is strict across Python minor versions for compiled packages (grpc, pandas).
 FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -30,7 +41,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
 
-# Build deps needed by wheels that compile from source (grpc, pandas).
+# Build deps for wheels that compile from source (grpc, pandas, etc.). These
+# never make it into the runtime image.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         build-essential \
@@ -46,63 +58,50 @@ WORKDIR /build
 # edits don't bust the install cache.
 COPY requirements.txt ./
 
-# Install into /opt/venv using uv. uv reads requirements.txt natively and
-# is meaningfully faster than pip on cold-cache builds. pyproject.toml + uv.lock
-# live in the repo for local-dev reproducibility but aren't required by the
-# image build.
-RUN python -m venv /opt/venv \
- && uv pip install --python /opt/venv/bin/python --no-cache -r requirements.txt
+# Install into /pyroot as a flat package directory. We bypass venvs entirely
+# so there are no symlinks to break when we copy this directory across to
+# the distroless runtime stage.
+RUN uv pip install \
+        --python "$(which python)" \
+        --target /pyroot \
+        --no-cache \
+        -r requirements.txt
 
 
-# ─── Stage 2: runtime ────────────────────────────────────────────────────────
-FROM python:3.11-slim AS runtime
+# ─── Stage 2: runtime (distroless) ───────────────────────────────────────────
+# Distroless Python ships with the Python 3.11 interpreter + stdlib + CA
+# certs + tzdata, and nothing else. Cloud Run handles signal forwarding to
+# PID 1, so no tini needed. Cloud Run handles healthchecks, so no
+# HEALTHCHECK directive needed.
+FROM gcr.io/distroless/python3-debian12:nonroot AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH=/pyroot:/app \
     PORT=8080 \
-    SATORI_STATE_BACKEND=firestore \
-    PYTHONPATH=/app
+    SATORI_STATE_BACKEND=firestore
 
-# Runtime-only system libs: curl for healthcheck, tini for proper signal
-# forwarding (gunicorn → workers under SIGTERM).
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-        curl \
-        ca-certificates \
-        tini \
- && rm -rf /var/lib/apt/lists/* \
- && groupadd --system --gid 1001 satori \
- && useradd  --system --uid 1001 --gid satori --home /home/satori --create-home satori
+# Bring in the installed package tree.
+COPY --from=builder --chown=nonroot:nonroot /pyroot /pyroot
 
-# Pull the venv from the builder. Paths match (both are python:3.11-slim)
-# so the venv's python symlink resolves correctly.
-COPY --from=builder /opt/venv /opt/venv
+# Bring in the app source. .dockerignore excludes data/, JSON state,
+# secrets, __pycache__, node_modules, and editor cruft.
+COPY --chown=nonroot:nonroot . /app
 
 WORKDIR /app
 
-# Copy app source. .dockerignore excludes data/, JSON state, secrets, __pycache__.
-COPY --chown=satori:satori . /app
-
-USER satori
-
 EXPOSE 8080
 
-# Container-level health check (Cloud Run also has its own).
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -fsS "http://localhost:${PORT}/api/health" || exit 1
-
-# tini reaps zombie workers and forwards SIGTERM cleanly to gunicorn.
-ENTRYPOINT ["/usr/bin/tini", "--"]
-
-# 4 gunicorn workers × UvicornWorker = async I/O via Starlette/Uvicorn.
-# Reasonable for 1 vCPU / 1 GiB Cloud Run revisions with concurrency=80.
-CMD ["gunicorn", \
-     "--bind", "0.0.0.0:8080", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--timeout", "60", \
-     "--graceful-timeout", "30", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "main:app"]
+# `python -m gunicorn` works because the gunicorn package ships a __main__.py
+# that re-exports the CLI entry point. This avoids depending on the
+# console-script shebang, which points at the builder's interpreter path
+# and would break inside distroless.
+ENTRYPOINT ["python", "-m", "gunicorn", \
+            "--bind", "0.0.0.0:8080", \
+            "--workers", "4", \
+            "--worker-class", "uvicorn.workers.UvicornWorker", \
+            "--timeout", "60", \
+            "--graceful-timeout", "30", \
+            "--access-logfile", "-", \
+            "--error-logfile", "-", \
+            "main:app"]
