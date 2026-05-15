@@ -34,10 +34,14 @@ WORKDIR /frontend
 # edits. package-lock.json* glob makes the COPY tolerant of its absence.
 COPY frontend/package.json frontend/package-lock.json* ./
 
-# `npm ci` is preferred when a lockfile exists — strict, reproducible. Falls
-# back to `npm install` if the lockfile is missing.
+# `npm ci` is preferred when the lockfile is in sync with package.json — strict
+# and reproducible. We fall back to `npm install` when (a) no lockfile exists or
+# (b) package.json has been updated faster than the lockfile (e.g. a dependency
+# was added by editing package.json directly without running `npm install`
+# locally). This keeps `git push` deploys frictionless even if the developer
+# doesn't have Node installed on their laptop.
 RUN if [ -f package-lock.json ]; then \
-        npm ci --no-audit --no-fund ; \
+        npm ci --no-audit --no-fund || npm install --no-audit --no-fund ; \
     else \
         npm install --no-audit --no-fund ; \
     fi

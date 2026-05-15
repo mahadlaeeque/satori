@@ -203,3 +203,73 @@ export interface Department {
   name: string;
   headcount: number;
 }
+
+// ── Attendance analytics ─────────────────────────────────────────────
+export interface AttendanceSummary {
+  total_records: number;
+  unique_employees: number;
+  present_days: number;
+  absent_days: number;
+  leave_days: number;
+  remote_days: number;
+  holiday_days: number;
+  weekend_days: number;
+  late_count: number;
+  attendance_rate: number;
+  late_rate: number;
+  on_time_rate: number;
+}
+
+export interface AttendanceTrendPoint {
+  date: string;
+  total: number;
+  present: number;
+  absent: number;
+  late: number;
+  rate: number;
+}
+
+export interface AttendanceDoW {
+  weekday: string;
+  rate: number;
+  late_pct: number;
+  present: number;
+  late: number;
+}
+
+export interface AttendanceCheckinBucket {
+  hour: number;
+  count: number;
+}
+
+export interface AttendanceDept {
+  department: string;
+  employees: number;
+  rate: number;
+  late: number;
+  total: number;
+}
+
+export interface AttendanceInsight {
+  severity: "good" | "warning" | "info";
+  title: string;
+  body: string;
+}
+
+export interface AttendanceAnalyticsResponse {
+  summary: AttendanceSummary;
+  daily_trend: AttendanceTrendPoint[];
+  day_of_week: AttendanceDoW[];
+  checkin_dist: AttendanceCheckinBucket[];
+  dept_breakdown: AttendanceDept[];
+  top_absent: Array<{ name: string; absent_days: number }>;
+  top_late: Array<{ name: string; late_count: number }>;
+  insights: AttendanceInsight[];
+  filters: {
+    range: number;
+    date_from: string;
+    date_to: string;
+    department: string;
+    employee: string;
+  };
+}

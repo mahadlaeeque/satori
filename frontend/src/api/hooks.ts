@@ -12,6 +12,7 @@ import {
 import { api } from "./client";
 import type {
   AskResponse,
+  AttendanceAnalyticsResponse,
   AvailabilityResponse,
   CapabilityMatrixResponse,
   Conversation,
@@ -114,6 +115,28 @@ export const useCapabilityMatrix = () =>
   useQuery<CapabilityMatrixResponse>({
     queryKey: ["capability-matrix"],
     queryFn: () => api.get<CapabilityMatrixResponse>("/api/capability-matrix"),
+  });
+
+// ── Attendance analytics ─────────────────────────────────────────────
+export const useAttendanceAnalytics = (params: {
+  range?: number;
+  department?: string;
+  employee?: string;
+  date_from?: string;
+  date_to?: string;
+}) =>
+  useQuery<AttendanceAnalyticsResponse>({
+    queryKey: ["attendance-analytics", params],
+    queryFn: () => {
+      const qs = new URLSearchParams(
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined && v !== "" && v !== null)
+          .map(([k, v]) => [k, String(v)]),
+      ).toString();
+      return api.get<AttendanceAnalyticsResponse>(
+        `/api/attendance-analytics${qs ? "?" + qs : ""}`,
+      );
+    },
   });
 
 // ── Health (sanity / status) ──────────────────────────────────────────

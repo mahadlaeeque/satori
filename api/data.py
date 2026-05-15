@@ -237,6 +237,301 @@ def _get_chart_data(request):
 
 
 # =====================================================================
+# /api/attendance-analytics — comprehensive dashboard payload
+# =====================================================================
+@router.get("/api/attendance-analytics")
+async def get_attendance_analytics(req: Request):
+    return to_response(_get_attendance_analytics(FlaskReq(req)))
+
+
+def _get_attendance_analytics(request):
+    """One round-trip dashboard payload: KPIs, daily trend, dept breakdown,
+    day-of-week, check-in distribution, top absentees/late, insights.
+
+    Filters: range (days, default 30), department, employee, date_from, date_to.
+    Department resolves via JOIN onto Employee_Data.Employee_Hierarchy.
+    """
+    settings = load_settings()
+    project = settings["gcp_project"]
+    dataset = settings["bq_dataset"]
+    att = f"`{project}.{dataset}.Attendance_Data`"
+    emp = f"`{project}.{dataset}.Employee_Data`"
+
+    # ── Parse filters ──────────────────────────────────────────────────
+    days = int(request.args.get("range", 30) or 30)
+    days = max(1, min(days, 365))
+    date_from = request.args.get("date_from", "").strip()
+    date_to   = request.args.get("date_to",   "").strip()
+    department = request.args.get("department", "").strip()
+    employee   = request.args.get("employee", "").strip()
+
+    # Build the WHERE clauses for the attendance side
+    where = []
+    if date_from:
+        where.append(f"a.attendance_date >= DATE('{date_from}')")
+    elif days:
+        where.append(f"a.attendance_date >= DATE_SUB(CURRENT_DATE(), INTERVAL {days} DAY)")
+    if date_to:
+        where.append(f"a.attendance_date <= DATE('{date_to}')")
+
+    where.append("a.attendance_date IS NOT NULL")
+
+    if employee:
+        safe_emp = employee.replace("'", "\\'").lower()
+        where.append(f"LOWER(CAST(a.employee_name AS STRING)) LIKE '%{safe_emp}%'")
+
+    # Department filter requires the JOIN
+    needs_emp_join = bool(department)
+    join_clause = ""
+    if needs_emp_join:
+        safe_dept = department.replace("'", "\\'")
+        join_clause = f"LEFT JOIN {emp} e ON CAST(e.Employee_Code AS STRING) = CAST(a.employee_id AS STRING)"
+        where.append(f"COALESCE(NULLIF(TRIM(e.Employee_Hierarchy), ''), 'Unspecified') = '{safe_dept}'")
+
+    where_str = " AND ".join(where) if where else "1=1"
+
+    try:
+        client = get_bq_client(settings)
+
+        # ── 1. Summary KPIs ─────────────────────────────────────────────
+        kpi_sql = f"""
+        SELECT
+          COUNT(*)                                              AS total_records,
+          COUNT(DISTINCT a.employee_id)                         AS unique_employees,
+          SUM(a.is_present)                                     AS present_days,
+          SUM(a.is_absent)                                      AS absent_days,
+          SUM(a.is_on_leave)                                    AS leave_days,
+          SUM(a.is_remote)                                      AS remote_days,
+          SUM(a.is_holiday)                                     AS holiday_days,
+          SUM(a.is_weekend)                                     AS weekend_days,
+          COUNTIF(LOWER(a.attendance_status_text) = 'late')     AS late_count,
+          ROUND(100.0 * SUM(a.is_present) / NULLIF(COUNT(*),0), 1) AS attendance_rate,
+          ROUND(100.0 * COUNTIF(LOWER(a.attendance_status_text) = 'late')
+                / NULLIF(SUM(a.is_present),0), 1)               AS late_rate
+        FROM {att} a
+        {join_clause}
+        WHERE {where_str}
+        """
+        kpi_row = list(client.query(kpi_sql).result())
+        kpi: Dict[str, Any] = {}
+        if kpi_row:
+            r = kpi_row[0]
+            kpi = {
+                "total_records":    int(r.total_records or 0),
+                "unique_employees": int(r.unique_employees or 0),
+                "present_days":     int(r.present_days or 0),
+                "absent_days":      int(r.absent_days or 0),
+                "leave_days":       int(r.leave_days or 0),
+                "remote_days":      int(r.remote_days or 0),
+                "holiday_days":     int(r.holiday_days or 0),
+                "weekend_days":     int(r.weekend_days or 0),
+                "late_count":       int(r.late_count or 0),
+                "attendance_rate":  float(r.attendance_rate or 0),
+                "late_rate":        float(r.late_rate or 0),
+                "on_time_rate":     round(100.0 - float(r.late_rate or 0), 1),
+            }
+
+        # ── 2. Daily trend ──────────────────────────────────────────────
+        trend_sql = f"""
+        SELECT
+          a.attendance_date AS date,
+          COUNT(*)                                                 AS total,
+          SUM(a.is_present)                                        AS present,
+          SUM(a.is_absent)                                         AS absent,
+          COUNTIF(LOWER(a.attendance_status_text) = 'late')        AS late,
+          ROUND(100.0 * SUM(a.is_present) / NULLIF(COUNT(*),0), 1) AS rate
+        FROM {att} a
+        {join_clause}
+        WHERE {where_str}
+        GROUP BY a.attendance_date
+        ORDER BY a.attendance_date
+        """
+        daily_trend = [{
+            "date":    str(r.date),
+            "total":   int(r.total or 0),
+            "present": int(r.present or 0),
+            "absent":  int(r.absent or 0),
+            "late":    int(r.late or 0),
+            "rate":    float(r.rate or 0),
+        } for r in client.query(trend_sql).result()]
+
+        # ── 3. Day-of-week breakdown ────────────────────────────────────
+        dow_sql = f"""
+        SELECT
+          FORMAT_DATE('%A', a.attendance_date)                     AS weekday,
+          EXTRACT(DAYOFWEEK FROM a.attendance_date)                AS dow_num,
+          COUNT(*)                                                 AS total,
+          SUM(a.is_present)                                        AS present,
+          COUNTIF(LOWER(a.attendance_status_text) = 'late')        AS late,
+          ROUND(100.0 * SUM(a.is_present) / NULLIF(COUNT(*),0), 1) AS rate,
+          ROUND(100.0 * COUNTIF(LOWER(a.attendance_status_text) = 'late')
+                / NULLIF(SUM(a.is_present),0), 1)                  AS late_pct
+        FROM {att} a
+        {join_clause}
+        WHERE {where_str} AND a.is_weekend = 0 AND a.is_holiday = 0
+        GROUP BY weekday, dow_num
+        ORDER BY dow_num
+        """
+        day_of_week = [{
+            "weekday":  r.weekday,
+            "rate":     float(r.rate or 0),
+            "late_pct": float(r.late_pct or 0),
+            "present":  int(r.present or 0),
+            "late":     int(r.late or 0),
+        } for r in client.query(dow_sql).result()]
+
+        # ── 4. Check-in hour distribution ───────────────────────────────
+        hour_sql = f"""
+        SELECT
+          EXTRACT(HOUR FROM SAFE_CAST(a.checkin_time AS TIMESTAMP)) AS hour,
+          COUNT(*) AS cnt
+        FROM {att} a
+        {join_clause}
+        WHERE {where_str} AND a.is_present = 1 AND a.checkin_time IS NOT NULL
+        GROUP BY hour
+        ORDER BY hour
+        """
+        checkin_dist = [{
+            "hour": int(r.hour),
+            "count": int(r.cnt or 0),
+        } for r in client.query(hour_sql).result() if r.hour is not None]
+
+        # ── 5. Department breakdown — always with the JOIN ──────────────
+        dept_where = [w for w in where if "Employee_Hierarchy" not in w]
+        dept_where_str = " AND ".join(dept_where) if dept_where else "1=1"
+        dept_sql = f"""
+        SELECT
+          COALESCE(NULLIF(TRIM(e.Employee_Hierarchy), ''), 'Unspecified') AS department,
+          COUNT(DISTINCT a.employee_id)                                   AS employees,
+          COUNT(*)                                                        AS total,
+          SUM(a.is_present)                                               AS present,
+          COUNTIF(LOWER(a.attendance_status_text) = 'late')               AS late,
+          ROUND(100.0 * SUM(a.is_present) / NULLIF(COUNT(*),0), 1)        AS rate
+        FROM {att} a
+        LEFT JOIN {emp} e ON CAST(e.Employee_Code AS STRING) = CAST(a.employee_id AS STRING)
+        WHERE {dept_where_str}
+        GROUP BY department
+        HAVING COUNT(*) > 5
+        ORDER BY employees DESC
+        LIMIT 12
+        """
+        dept_breakdown = [{
+            "department": r.department,
+            "employees":  int(r.employees or 0),
+            "rate":       float(r.rate or 0),
+            "late":       int(r.late or 0),
+            "total":      int(r.total or 0),
+        } for r in client.query(dept_sql).result()]
+
+        # ── 6. Top absentees ────────────────────────────────────────────
+        abs_sql = f"""
+        SELECT
+          a.employee_name AS name,
+          COUNT(*)        AS absent_days
+        FROM {att} a
+        {join_clause}
+        WHERE {where_str} AND a.is_absent = 1 AND a.employee_name IS NOT NULL
+        GROUP BY a.employee_name
+        ORDER BY absent_days DESC
+        LIMIT 10
+        """
+        top_absent = [{
+            "name": r.name,
+            "absent_days": int(r.absent_days or 0),
+        } for r in client.query(abs_sql).result()]
+
+        # ── 7. Top late arrivals ────────────────────────────────────────
+        late_sql = f"""
+        SELECT
+          a.employee_name        AS name,
+          COUNT(*)               AS late_count
+        FROM {att} a
+        {join_clause}
+        WHERE {where_str}
+          AND LOWER(a.attendance_status_text) = 'late'
+          AND a.employee_name IS NOT NULL
+        GROUP BY a.employee_name
+        ORDER BY late_count DESC
+        LIMIT 10
+        """
+        top_late = [{
+            "name": r.name,
+            "late_count": int(r.late_count or 0),
+        } for r in client.query(late_sql).result()]
+
+        # ── 8. Rule-based insights ──────────────────────────────────────
+        insights: List[Dict[str, Any]] = []
+        if kpi.get("attendance_rate", 0) >= 95:
+            insights.append({
+                "severity": "good",
+                "title": "Strong attendance",
+                "body": f"Attendance rate is {kpi['attendance_rate']}% — comfortably above the 90% healthy band.",
+            })
+        elif kpi.get("attendance_rate", 0) < 85:
+            insights.append({
+                "severity": "warning",
+                "title": "Attendance below threshold",
+                "body": f"Attendance rate is {kpi['attendance_rate']}%. Investigate top absentees and recent trend.",
+            })
+
+        if kpi.get("late_rate", 0) > 12:
+            insights.append({
+                "severity": "warning",
+                "title": "Elevated late arrivals",
+                "body": f"{kpi['late_rate']}% of present days were late — typical band is under 10%.",
+            })
+
+        if day_of_week:
+            worst = min(day_of_week, key=lambda x: x["rate"])
+            best = max(day_of_week, key=lambda x: x["rate"])
+            if worst["rate"] < best["rate"] - 5:
+                insights.append({
+                    "severity": "info",
+                    "title": f"{worst['weekday']} is the weakest day",
+                    "body": f"{worst['weekday']} attendance is {worst['rate']}% vs {best['weekday']} at {best['rate']}%. "
+                            f"Consider what's different that day.",
+                })
+
+        if checkin_dist:
+            peak = max(checkin_dist, key=lambda x: x["count"])
+            insights.append({
+                "severity": "info",
+                "title": "Peak check-in hour",
+                "body": f"Most check-ins happen at {peak['hour']:02d}:00 ({peak['count']:,} records).",
+            })
+
+        if top_absent and top_absent[0]["absent_days"] >= 5:
+            insights.append({
+                "severity": "warning",
+                "title": "Persistent absentee",
+                "body": f"{top_absent[0]['name']} has {top_absent[0]['absent_days']} absences in the selected window — "
+                        f"may warrant a manager conversation.",
+            })
+
+        return jsonify({
+            "summary":         kpi,
+            "daily_trend":     daily_trend,
+            "day_of_week":     day_of_week,
+            "checkin_dist":    checkin_dist,
+            "dept_breakdown":  dept_breakdown,
+            "top_absent":      top_absent,
+            "top_late":        top_late,
+            "insights":        insights,
+            "filters": {
+                "range":      days,
+                "date_from":  date_from,
+                "date_to":    date_to,
+                "department": department,
+                "employee":   employee,
+            },
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# =====================================================================
 # GEMINI HELP ENDPOINT
 # =====================================================================
 
