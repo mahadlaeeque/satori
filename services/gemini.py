@@ -17,6 +17,12 @@ from google.cloud import bigquery
 
 # Re-import state store so functions can fetch conversation messages
 from firestore_client import store as state_store
+# These names are referenced inside ask_satori (extracted verbatim from
+# the legacy app.py global scope). Bind them at module level so the
+# function can call them without changes.
+get_conversation_messages    = state_store.get_conversation_messages
+add_message_to_conversation  = state_store.add_message_to_conversation
+
 # Settings loader + secret resolution still live in main app; import lazily
 # to avoid circular dependencies. These are referenced by ask_satori for
 # language detection / pronunciation rules etc.
