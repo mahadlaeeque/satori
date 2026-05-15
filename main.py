@@ -15,10 +15,11 @@ Run for production (in Dockerfile / Cloud Run):
 from __future__ import annotations
 import logging
 import os
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import (
     chat,
@@ -118,10 +119,30 @@ def dashboard(request: Request):
 
 # ── React app — mount only if frontend/dist exists (built via `npm run build`)
 _FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
+
+
+class SPAStaticFiles(StaticFiles):
+    """StaticFiles that falls back to index.html for any unknown path.
+
+    React Router uses client-side routing — URLs like /app/chat and
+    /app/attendance aren't real files on disk, but the React app knows how to
+    render them once it boots. Without this fallback, deep-linking or refreshing
+    on any sub-route returns a 404 from FastAPI before the React app gets a
+    chance to load. With this fallback, every unknown path under /app serves
+    index.html so React Router can take over.
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except (HTTPException, StarletteHTTPException) as exc:
+            if exc.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
 if os.path.isdir(_FRONTEND_DIST):
-    # SPA-style mount: serves index.html for the /app prefix, and any /app/<asset>
-    # paths fall through to the Vite-emitted assets directory.
-    app.mount("/app", StaticFiles(directory=_FRONTEND_DIST, html=True), name="react_app")
+    app.mount("/app", SPAStaticFiles(directory=_FRONTEND_DIST, html=True), name="react_app")
 else:
     @app.get("/app", response_class=HTMLResponse)
     @app.get("/app/{path:path}", response_class=HTMLResponse)
