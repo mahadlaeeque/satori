@@ -29,9 +29,10 @@ async function request<T>(
   if (!res.ok) {
     let parsed: unknown = null;
     try { parsed = await res.json(); } catch { /* non-JSON body */ }
-    const msg =
-      (parsed && typeof parsed === "object" && parsed && "detail" in parsed && String((parsed as any).detail)) ||
-      `Request failed: ${method} ${path} → ${res.status}`;
+    let msg = `Request failed: ${method} ${path} → ${res.status}`;
+    if (parsed && typeof parsed === "object" && "detail" in parsed) {
+      msg = String((parsed as { detail: unknown }).detail);
+    }
     throw new ApiError(msg, res.status, parsed);
   }
   // The /static/* endpoints don't have a body — guard for empty
