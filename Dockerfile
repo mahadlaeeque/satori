@@ -1,38 +1,57 @@
 # ============================================================================
-# Satori — Production container image (distroless)
+# Satori — Production container image (distroless + bundled React build)
 # ============================================================================
-# Multi-stage build:
-#   1. builder — uses `uv` to install deps into a flat directory (/pyroot)
-#   2. runtime — Google distroless Python 3 (nonroot), gunicorn on port 8080
+# Three-stage build:
+#   1. frontend-builder — Node 20, runs `npm ci && npm run build` to produce
+#      the Vite/React static bundle at /frontend/dist.
+#   2. python-builder   — uv installs deps into a flat /pyroot directory.
+#   3. runtime          — Google distroless Python 3 (nonroot). Picks up the
+#      python packages, the application source, and the pre-built React app.
 #
 # Why this shape:
 #   * uv installs ~10× faster than pip (Backend baseline).
 #   * Distroless runtime ships only Python + stdlib + CA certs — no shell,
-#     no apt, no curl. Tiny image (~60 MB), smaller attack surface, faster
+#     no apt, no curl. Tiny image (~65 MB), smaller attack surface, faster
 #     Cloud Run cold-starts. (Containers baseline.)
 #   * `pip --target` instead of a venv avoids the classic distroless+venv
 #     footgun (the venv's `python` is a symlink to the builder's interpreter
 #     path, which doesn't exist inside distroless). A flat package dir is
-#     copied over verbatim and picked up via PYTHONPATH — no symlinks to
-#     break across stages.
+#     copied over verbatim and picked up via PYTHONPATH.
 #   * Gunicorn is invoked via `python -m gunicorn` instead of the console
 #     script, because the console script's shebang points at the builder's
 #     Python and would fail in distroless.
-#   * The `:nonroot` tag pre-creates UID/GID 65532 and runs as that user.
-#
-# Build locally:    docker build -t satori:dev .
-# Run locally:      docker run --rm -p 8080:8080 -e SATORI_STATE_BACKEND=firestore \
-#                       -v $HOME/.config/gcloud:/home/nonroot/.config/gcloud:ro \
-#                       satori:dev
-# Health check:     curl http://localhost:8080/api/health
-#                   (HEALTHCHECK directive intentionally absent — distroless
-#                   has no curl, and Cloud Run runs its own liveness probe.)
+#   * Building the React app in-image means you never have to remember to
+#     `npm run build` locally before pushing. Every `git push` produces a
+#     fully self-contained image with the latest frontend baked in.
 # ============================================================================
 
-# ─── Stage 1: builder ────────────────────────────────────────────────────────
+# ─── Stage 1: frontend-builder ───────────────────────────────────────────────
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /frontend
+
+# Layer-cache: copy manifests first so dep installs aren't busted by source
+# edits. package-lock.json* glob makes the COPY tolerant of its absence.
+COPY frontend/package.json frontend/package-lock.json* ./
+
+# `npm ci` is preferred when a lockfile exists — strict, reproducible. Falls
+# back to `npm install` if the lockfile is missing.
+RUN if [ -f package-lock.json ]; then \
+        npm ci --no-audit --no-fund ; \
+    else \
+        npm install --no-audit --no-fund ; \
+    fi
+
+# Now bring in the rest of the frontend source and build.
+COPY frontend/ ./
+RUN npm run build
+# Output is at /frontend/dist — copied into the runtime stage below.
+
+
+# ─── Stage 2: python-builder ─────────────────────────────────────────────────
 # Pinned to 3.11 to match the distroless runtime — wheel ABI compatibility
 # is strict across Python minor versions for compiled packages (grpc, pandas).
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim AS python-builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -68,11 +87,11 @@ RUN uv pip install \
         -r requirements.txt
 
 
-# ─── Stage 2: runtime (distroless) ───────────────────────────────────────────
+# ─── Stage 3: runtime (distroless) ───────────────────────────────────────────
 # Distroless Python ships with the Python 3.11 interpreter + stdlib + CA
 # certs + tzdata, and nothing else. Cloud Run handles signal forwarding to
-# PID 1, so no tini needed. Cloud Run handles healthchecks, so no
-# HEALTHCHECK directive needed.
+# PID 1 (no tini needed) and runs its own healthchecks against /api/health
+# (no HEALTHCHECK directive needed).
 FROM gcr.io/distroless/python3-debian12:nonroot AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -81,12 +100,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080 \
     SATORI_STATE_BACKEND=firestore
 
-# Bring in the installed package tree.
-COPY --from=builder --chown=nonroot:nonroot /pyroot /pyroot
+# Python packages.
+COPY --from=python-builder --chown=nonroot:nonroot /pyroot /pyroot
 
-# Bring in the app source. .dockerignore excludes data/, JSON state,
-# secrets, __pycache__, node_modules, and editor cruft.
+# Application source. .dockerignore excludes data/, JSON state, secrets,
+# __pycache__, node_modules, and editor cruft.
 COPY --chown=nonroot:nonroot . /app
+
+# React build artefacts on top — overlays /app/frontend/dist with the
+# Node-built bundle. FastAPI's main.py auto-mounts /app/frontend/dist at
+# the /app route when the directory exists.
+COPY --from=frontend-builder --chown=nonroot:nonroot /frontend/dist /app/frontend/dist
 
 WORKDIR /app
 

@@ -18,6 +18,15 @@ venv/
 .venv/
 env/
 
+# Frontend build artefacts — the Dockerfile's frontend-builder stage runs
+# `npm ci && npm run build` inside the container, so we don't ship the
+# user's local node_modules or stale dist/ output. (The fresh dist/ produced
+# inside the container IS shipped — that COPY happens after this exclusion.)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+**/node_modules/
+
 # Local state — must NEVER ship in the image
 chat_history.json
 settings.json
