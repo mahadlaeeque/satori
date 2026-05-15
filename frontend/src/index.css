@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+html.dark body {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+/* Headings use Lora serif - matches the legacy Satori UI's editorial feel. */
+h1, h2, h3 {
+  font-family: 'Lora', ui-serif, Georgia, serif;
+  letter-spacing: -0.015em;
+}
+h4, h5, h6 {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+::-webkit-scrollbar              { width: 8px; height: 8px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: rgba(148,163,184,0.35); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover  { background: rgba(148,163,184,0.55); }
+
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: #1e293b;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+html.dark input:-webkit-autofill,
+html.dark textarea:-webkit-autofill,
+html.dark select:-webkit-autofill {
+  -webkit-text-fill-color: #f1f5f9;
+  -webkit-box-shadow: 0 0 0px 1000px #0f172a inset;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Site-wide dark mode contrast lifts.
+   Tailwind's slate-700/800/900 text colors and slate-50/100/white surfaces
+   were designed for a light canvas. In dark mode they vanish against the
+   navy background, so we remap them here as a baseline. Any element that
+   explicitly sets a dark:bg-* or dark:text-* utility still wins, because
+   Tailwind utilities load in @layer utilities (which sits after @layer base).
+   ───────────────────────────────────────────────────────────────────────── */
+@layer base {
+  /* text contrast */
+  .dark .text-slate-900 { color: #f1f5f9; }  /* slate-100 */
+  .dark .text-slate-800 { color: #e2e8f0; }  /* slate-200 */
+  .dark .text-slate-700 { color: #cbd5e1; }  /* slate-300 */
+  .dark .text-slate-600 { color: #94a3b8; }  /* slate-400 */
+  .dark .text-slate-500 { color: #94a3b8; }  /* slate-400 */
+
+  /* surface colors */
+  .dark .bg-white     { background-color: #0f172a; }  /* satori-paper */
+  .dark .bg-slate-50  { background-color: #0b1220; }  /* satori-ink */
+  .dark .bg-slate-100 { background-color: #1e293b; }  /* slate-800 */
+
+  /* borders */
+  .dark .border-slate-200 { border-color: #1e293b; }  /* slate-800 */
+  .dark .border-slate-300 { border-color: #334155; }  /* slate-700 */
+
+  /* hover variants — keep parity with the static colors above */
+  .dark .hover\:bg-slate-50:hover     { background-color: #1e293b; }
+  .dark .hover\:bg-slate-100:hover    { background-color: #334155; }
+  .dark .hover\:text-slate-700:hover  { color: #cbd5e1; }
+  .dark .hover\:text-slate-800:hover  { color: #e2e8f0; }
+  .dark .hover\:text-slate-900:hover  { color: #f1f5f9; }
+  .dark .hover\:border-slate-300:hover { border-color: #475569; }
+  .dark .hover\:border-slate-500:hover { border-color: #64748b; }
+}
+
+@layer components {
+  .card        { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-soft; }
+  .card-hover  { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md; }
+  .kpi         { @apply card p-4 border-t-2; }
+  .pill        { @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold; }
+  .btn-primary { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-br from-satori-green to-satori-teal text-white text-sm font-semibold hover:opacity-90 transition shadow-sm; }
+  .btn-ghost   { @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition; }
+  .input       { @apply px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-satori-green focus:ring-2 focus:ring-satori-green/20; }
+  .num         { @apply tabular-nums; }
+}
