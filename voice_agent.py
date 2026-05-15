@@ -14,7 +14,13 @@ The backend provides:
 import json
 import logging
 import requests as http_requests
-from flask import request, jsonify
+
+# NOTE: Flask is no longer a dependency — we run on FastAPI now. The legacy
+# Flask route handlers further down in this module (any function that calls
+# `request.get_json()` or `jsonify(...)`) are dead code, kept temporarily as
+# reference while the migration settles. They will never execute under the
+# current FastAPI entrypoint. The only callable surface from this module is
+# `_build_system_instruction` and `_build_tools`, both used by api/voice.py.
 
 logger = logging.getLogger(__name__)
 
